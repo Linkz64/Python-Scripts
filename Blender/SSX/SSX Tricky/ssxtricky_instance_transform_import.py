@@ -15,6 +15,7 @@ class ImportInstanceTransformations(bpy.types.Operator):
         ssxfe =     {'name': "Menu",                    'pbd':"ssxfe.pbd",      'lineNum': 2}
         trick =     {'name': "Trick Tutorial",          'pbd':"trick.pbd",      'lineNum': 343}
         gari =      {'name': "Garibaldi",               'pbd':"gari.pbd",       'lineNum': 917}
+        snow =      {'name': "Snowdream",               'pbd':"snow.pbd",       'lineNum': 4314}
         elysium =   {'name': "Elysium Alps",            'pbd':"elysium.pbd",    'lineNum': 7548}
         mesa =      {'name': "Mesablanca",              'pbd':"mesa.pbd",       'lineNum': 11485}
         merquer =   {'name': "Merqury City Meltdown",   'pbd':"merquer.pbd",    'lineNum': 14568}
