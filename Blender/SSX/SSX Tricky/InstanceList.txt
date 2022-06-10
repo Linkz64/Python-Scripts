@@ -1,5 +1,5 @@
 ################################################################
-[SSXFE]
+[Menu]
 mdl_videotop
 mdl_flashpot
 mdl_videoscreen
