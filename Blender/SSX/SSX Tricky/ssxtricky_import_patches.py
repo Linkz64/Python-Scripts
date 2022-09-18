@@ -297,14 +297,14 @@ def read_file_data(context, filepath, scale, use_count, count):
         r13[3]=r14[3]=r15[3]=r16[3]= 1.0
     
     
-        procPoints = [r01, r02, r03, r04,
+        rawPoints = [r01, r02, r03, r04,
                       r05, r06, r07, r08,
                       r09, r10, r11, r12,
                       r13, r14, r15, r16]
     
-        procPoints = sort_b(procPoints)
+        rawPoints = sort_a(rawPoints)
     
-        return procPoints
+        return rawPoints
     
     
     def create_patch_obj(patchPoints, name, increment): # List of xyzw values, Name of patch object, Current loop increment value
@@ -380,6 +380,7 @@ def read_file_data(context, filepath, scale, use_count, count):
 
     timeEnd = time.time()
     print(f"\n\nFINISHED\nTime Taken: {round(timeEnd-timeStart, 6)}s\n")
+
     return {'FINISHED'}
 
 
@@ -426,6 +427,12 @@ class ImportData(Operator, ImportHelper):
         max     = 1000000,
         subtype = 'UNSIGNED'
     )
+
+    #override_count: BoolProperty(
+    #    name="Override Game Count",
+    #    description="Allows you to decrease the number of patches rendered in game.\nCan only be lower than existing patch count",
+    #    default=False,
+    #)
 
     # bpy.props.IntProperty(name="Test")
     # filename, extension = os.path.splitext(self.filepath)
