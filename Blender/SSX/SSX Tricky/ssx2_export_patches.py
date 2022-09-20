@@ -1,5 +1,5 @@
 """ 
-Blender (2.93+) script that exports surface patches into SSX Tricky's .*bd files
+Blender (2.92+) script that exports surface patches into SSX Tricky's .*bd files
 
 Credits:
     SSX Tricky patch export code
@@ -15,11 +15,12 @@ How to use:
     - Optional: Open Terminal to see progress and errors (Window > Toggle System Console)
     - Run script
     - Set custom properties
-    - Choose and Export file
+    - Choose an existing file and click "Export Patches"
 
 
 To do:
     - Nothing
+
 """
 import os
 import bpy
@@ -116,10 +117,10 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
 
     fbd.seek(patchAddress, 0)
 
+    
 
     def export_patches_ps2(): # OVERRIDE PS2 PATCHES (SONY PLAYSTATION 2)
 
-            patchPointLists = []
     
             for pch in range(patchCount):
             
@@ -131,6 +132,9 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
                     surface_object = bdat.objects[f"{patchObjName}{pch}"].data.splines
     
                     fbd.seek(0x50, 1) # placeholder skip UVs
+
+
+                    rawPoints = [vec((0.0, 0.0, 0.0))]*16 # test if I can do this with tuple and compare time
         
     
                     pointsList = []
@@ -140,37 +144,22 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
                             pointsList.append(mathutils.Vector(
                                 (p.co[0]*pchScale, p.co[1]*pchScale, p.co[2]*pchScale)))
                             #p.select = False
+
+                    rawPoints = sort_a(pointsList)
+
+
+                    pointProcList = process_patch_points(rawPoints)
+
+
+                    #print(pointProcList)
         
-        
-                    #pointsList = rearrange(pointsList)
-                    pointProcList = process_patch_points(pointsList)
-        
-        
-                    patchPointLists.append(pointProcList)
-        
-        
-                    for i in range(16): # write to .*bd file
-                        if   i == 0: # skip point 1
-                            fbd.seek(16, 1)
-                        elif i == 1: # skip point 2
-                            fbd.seek(16, 1)
-                        elif i == 4: # skip point 5
-                            fbd.seek(16, 1)
-                        elif i == 5: # skip point 6
-                            fbd.seek(16, 1)
-                        else:
-                            packedPoints = struct.pack('ffff', 
-                                pointProcList[i][0], pointProcList[i][1], pointProcList[i][2], 1.0)
-                            fbd.write(packedPoints)
+                    for i in range(16):                         # write patch points to .*bd file
+                            fbd.write(struct.pack('ffff', pointProcList[i][0], pointProcList[i][1], pointProcList[i][2], 1.0))
         
                     #print(hex(fbd.tell()))
         
-        
-                    bounds = struct.pack('f'*6, *minmax(pointsList))
-                    fbd.write(bounds)
-        
-                    corners = struct.pack('f'*16, *get_corners(pointsList))
-                    fbd.write(corners)
+                    fbd.write(struct.pack('f'*6, *minmax(rawPoints))) # write bounds (2 points)
+                    fbd.write(struct.pack('f'*16, *get_corners(rawPoints))) # write corners (4 points)
         
         
         
@@ -190,7 +179,6 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
     
     def export_patches_xbx(): # OVERRIDE PS2 PATCHES (SONY PLAYSTATION 2)
 
-            patchPointLists = []
     
             for pch in range(patchCount):
 
@@ -203,6 +191,9 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
                     fbd.seek(0x50, 1) # placeholder skip UVs
         
     
+                    rawPoints = [vec((0.0, 0.0, 0.0))]*16 # test if I can do this with tuple and compare time
+        
+    
                     pointsList = []
                     for s in surface_object:
                         for p in s.points:
@@ -210,39 +201,24 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
                             pointsList.append(mathutils.Vector(
                                 (p.co[0]*pchScale, p.co[1]*pchScale, p.co[2]*pchScale)))
                             #p.select = False
+
+                    rawPoints = sort_a(pointsList)
+
+
+                    pointProcList = process_patch_points(rawPoints)
+
+
+                    #print(pointProcList)
+        
+                    for i in range(16):                         # write patch points to .*bd file
+                            fbd.write(struct.pack('ffff', pointProcList[i][0], pointProcList[i][1], pointProcList[i][2], 1.0))
         
         
-                    #pointsList = rearrange(pointsList)
-                    pointProcList = process_patch_points(pointsList)
-        
-        
-                    patchPointLists.append(pointProcList)
-        
-        
-                    for i in range(16): # write to .*bd file
-                        if   i == 0: # skip point 1
-                            fbd.seek(16, 1)
-                        elif i == 1: # skip point 2
-                            fbd.seek(16, 1)
-                        elif i == 4: # skip point 5
-                            fbd.seek(16, 1)
-                        elif i == 5: # skip point 6
-                            fbd.seek(16, 1)
-                        else:
-                            fbd.write(struct.pack(
-                                'ffff', pointProcList[i][0], pointProcList[i][1], pointProcList[i][2], 1.0)
-                            )
-        
-                    #print(hex(fbd.tell()))
-        
-        
-                    bounds = struct.pack('f'*6, *minmax(pointsList))
-                    fbd.write(bounds)
+                    fbd.write(struct.pack('f'*6, *minmax(rawPoints))) # write bounds (2 points)
 
                     fbd.seek(0x18, 1) # skip unknown
-        
-                    corners = struct.pack('f'*16, *get_corners(pointsList))
-                    fbd.write(corners)
+
+                    fbd.write(struct.pack('f'*16, *get_corners(rawPoints))) # write corners (4 points)
         
         
         
@@ -261,7 +237,6 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
 
     def export_patches_ngc(): # OVERRIDE GAMECUBE PATCHES (NINTENDO GAMECUBE)
         
-            patchPointLists = []
     
             for pch in range(patchCount):
     
@@ -272,7 +247,9 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
                     surface_object = bdat.objects[f"{patchObjName}{pch}"].data.splines
         
         
+                    rawPoints = [vec((0.0, 0.0, 0.0))]*16 # test if I can do this with tuple and compare time
         
+    
                     pointsList = []
                     for s in surface_object:
                         for p in s.points:
@@ -280,39 +257,24 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
                             pointsList.append(mathutils.Vector(
                                 (p.co[0]*pchScale, p.co[1]*pchScale, p.co[2]*pchScale)))
                             #p.select = False
-        
-        
-                    #pointSortList = rearrange(pointsList)
-                    #pointProcList = process_patch_points(pointSortList)
-                    pointProcList = process_patch_points(pointsList)
-        
-        
-                    patchPointLists.append(pointProcList)
-        
-        
-                    for i in range(16): # write to .*bd file
-        
-                        if   i == 0: # skip point 1
-                            fbd.seek(16, 1)
-                        elif i == 1: # skip point 2
-                            fbd.seek(16, 1)
-                        elif i == 4: # skip point 5
-                            fbd.seek(16, 1)
-                        elif i == 5: # skip point 6
-                            fbd.seek(16, 1)
-                        else:
-                            fbd.write( struct.pack(
-                                '>ffff', pointProcList[i][0], pointProcList[i][1], pointProcList[i][2], 1.0)
-                            )
-        
-        
-                    bounds = struct.pack('>ffffff', *minmax(pointsList))
-                    fbd.write(bounds)
 
-                    fbd.seek(0x4, 1)
+                    rawPoints = sort_a(pointsList)
+
+
+                    pointProcList = process_patch_points(rawPoints)
+
+
+                    #print(pointProcList)
         
-                    corners = struct.pack('>ffffffffffffffff', *get_corners(pointsList))
-                    fbd.write(corners)
+                    for i in range(16):                         # write patch points to .*bd file
+                            fbd.write(struct.pack('>ffff', pointProcList[i][0], pointProcList[i][1], pointProcList[i][2], 1.0))
+        
+        
+                    fbd.write(struct.pack('>ffffff', *minmax(rawPoints)))
+
+                    fbd.seek(0x4, 1) # gap/padding/filler
+        
+                    fbd.write(struct.pack('>ffffffffffffffff', *get_corners(rawPoints)))
         
         
                     fbd.seek(0x14, 1) # skip unknown
@@ -347,54 +309,98 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
         return ret
     
     
-    def rearrange(p):
+    def sort_a(p):
         ret = [p[3], p[7], p[11], p[15],
                p[2], p[6], p[10], p[14], 
                p[1], p[5], p[ 9], p[13],
                p[0], p[4], p[ 8], p[12],]
         return ret
+
+    def sort_b(p):
+        pass
+
+
+    def raw_to_mid_eq1(a, b, rawPoints):
+        return (rawPoints[a] - rawPoints[b]) * 3
+    
+    def raw_to_mid_eq2(a, b, midA, rawPoints, midTablePoints):
+        return (rawPoints[a] - rawPoints[b]) * 3 - midTablePoints[midA]
+    
+    def raw_to_mid_eq3(a,    midA, midB, midC, rawPoints, midTablePoints):
+        return rawPoints[a] - midTablePoints[midA] - midTablePoints[midB] - midTablePoints[midC]
+    
+
+    def mid_to_proc_eq1(a, b, midTablePoints):
+        return (midTablePoints[a] - midTablePoints[b]) * 3
+    
+    def mid_to_proc_eq2(a, b, EndA, midTablePoints, processedPoints):
+        return (midTablePoints[a] - midTablePoints[b]) * 3 - processedPoints[EndA]
+    
+    def mid_to_proc_eq3(a,         midA, midB, midC, midTablePoints, processedPoints):
+        return midTablePoints[a] - processedPoints[midA] - processedPoints[midB] - processedPoints[midC]
+
     
     
-    def process_patch_points(r): # EQUATIONS, CALCULATIONS, EXAGGERATIONS, THE LOT!
+    def process_patch_points(rawPoints):
     
-        # r = Raw point, e = Encoded point
+        midTablePoints  = [vec((0.0, 0.0, 0.0))]*16
+        processedPoints = [vec((0.0, 0.0, 0.0))]*16
+
     
-        # e16 = same as r[0]
-        e15 = (r[1] - r[0])*3
-        e14 = (r[2] - r[1])*3 - e15
-        e13 = r[3] - e14 - e15 - r[0]
-    
-        e12 = (r[4] - r[0])*3
-        e11 = r[5]*9 - r[0]*9 - e15*3 - e12*3
-        e10 = 9*r[6] - r[5]*9 - e14*3 - e15*3 - e11
-        e9  = r[7]*3 - r[3]*3 - e12 - e11 - e10
-    
-        e8  = (r[8] - r[4])*3 - e12
-        e7  = 9*r[9] - r[5]*9 - e12*3 - e8*3 - e11
-        e6  = r[10]                                   # missing equation
-        e5  = r[11]*3 - r[7]*3 - e12 - e11 - e7 - e9 - e10 - e8 - e6 # wrong due to e6 missing
-    
-        e4  = r[12] - r[0] - e12 - e8
-        e3  = r[13]*3 - r[12]*3 - e15 - e11 - e7
-        e2  = r[14]*3 - r[13]*3 - e15 - e11 - e7 - e14 - e10 - e3 - e6   # wrong due to e6 missing
-        e1  = r[15] - (r[0]+e15+e14+e13+e12+e11+e9+e8+e7+e6+e5+e4+e3+e2) # wrong due to e6 missing
-    
-    
-    
-        #print(f"""
-        #    { e1 = }\n{ e2 = }\n{ e3 = }\n{ e4 = }
-        #    { e5 = }\n{ e6 = }\n{ e7 = }\n{ e8 = }
-        #    { e9 = }\n{e10 = }\n{e11 = }\n{e12 = }
-        #    {e13 = }\n{e14 = }\n{e15 = }\n{r[0] = }\n""")
-    
-    
-        processedPoints = [e1, e2, e3, e4, 
-                           e5, e6, e7, e8, 
-                           e9, e10, e11, e12, 
-                           e13, e14, e15, r[0]]
-    
-    
-        return processedPoints
+        midTablePoints[ 0] = rawPoints[0]
+        midTablePoints[ 1] = raw_to_mid_eq1(1, 0, rawPoints)
+        midTablePoints[ 2] = raw_to_mid_eq2(2, 1, 1, rawPoints, midTablePoints)
+        midTablePoints[ 3] = raw_to_mid_eq3(3, 2, 1, 0, rawPoints, midTablePoints)
+
+        midTablePoints[ 4] = rawPoints[4]
+        midTablePoints[ 5] = raw_to_mid_eq1(5, 4, rawPoints)
+        midTablePoints[ 6] = raw_to_mid_eq2(6, 5, 5, rawPoints, midTablePoints)
+        midTablePoints[ 7] = raw_to_mid_eq3(7, 6, 5, 4, rawPoints, midTablePoints)
+
+        midTablePoints[ 8] = rawPoints[8]
+        midTablePoints[ 9] = raw_to_mid_eq1(9, 8, rawPoints)
+        midTablePoints[10] = raw_to_mid_eq2(10, 9, 9, rawPoints, midTablePoints)
+        midTablePoints[11] = raw_to_mid_eq3(11, 10, 9, 8, rawPoints, midTablePoints)
+
+        midTablePoints[12] = rawPoints[12]
+        midTablePoints[13] = raw_to_mid_eq1(13, 12, rawPoints)
+        midTablePoints[14] = raw_to_mid_eq2(14, 13, 13, rawPoints, midTablePoints)
+        midTablePoints[15] = raw_to_mid_eq3(15, 14, 13, 12, rawPoints, midTablePoints)
+
+
+        processedPoints[ 0] = midTablePoints[0]
+        processedPoints[ 1] = midTablePoints[1]
+        processedPoints[ 2] = midTablePoints[2]
+        processedPoints[ 3] = midTablePoints[3]
+
+        processedPoints[ 4] = mid_to_proc_eq1(4, 0, midTablePoints)
+        processedPoints[ 5] = mid_to_proc_eq1(5, 1, midTablePoints)
+        processedPoints[ 6] = mid_to_proc_eq1(6, 2, midTablePoints)
+        processedPoints[ 7] = mid_to_proc_eq1(7, 3, midTablePoints)
+
+        processedPoints[ 8] = mid_to_proc_eq2( 8, 4, 4, midTablePoints, processedPoints)
+        processedPoints[ 9] = mid_to_proc_eq2( 9, 5, 5, midTablePoints, processedPoints)
+        processedPoints[10] = mid_to_proc_eq2(10, 6, 6, midTablePoints, processedPoints)
+        processedPoints[11] = mid_to_proc_eq2(11, 7, 7, midTablePoints, processedPoints)
+
+        processedPoints[12] = mid_to_proc_eq3(12,  8, 4, 0, midTablePoints, processedPoints)
+        processedPoints[13] = mid_to_proc_eq3(13,  9, 5, 1, midTablePoints, processedPoints)
+        processedPoints[14] = mid_to_proc_eq3(14, 10, 6, 2, midTablePoints, processedPoints)
+        processedPoints[15] = mid_to_proc_eq3(15, 11, 7, 3, midTablePoints, processedPoints)
+
+
+        #processedPoints.reverse() # terrible rounding
+
+        test = list(reversed(processedPoints)) # normal
+
+        #test = [processedPoints[15], processedPoints[14], processedPoints[13], processedPoints[12], 
+        #         processedPoints[11], processedPoints[10], processedPoints[ 9], processedPoints[ 8], 
+        #         processedPoints[ 7], processedPoints[ 6], processedPoints[ 5], processedPoints[ 4], 
+        #         processedPoints[ 3], processedPoints[ 2], processedPoints[ 1], processedPoints[ 0]]
+
+        #print(list(test))
+
+        return test
         
     
     
@@ -407,7 +413,7 @@ def write_file_data(context, filepath, consVer, scale, use_count, count, overrid
         elif consVer == '3':
             export_patches_ngc()
         else:
-            print("INVALID PLATFORMMMMMMMMMMM")
+            print("ERROR: Invalid Platform.")
 
             fbd.close()
             return {'CANCELLED'}
@@ -480,7 +486,7 @@ class Export_Data(Operator, ExportHelper):
 
     count: IntProperty(
         name    = "Patch Count",
-        default = 1000,
+        default = 500,
         min     = 1,
         max     = 1000000,
         subtype = 'UNSIGNED'
@@ -488,7 +494,7 @@ class Export_Data(Operator, ExportHelper):
 
     override_count: BoolProperty(
         name="Override Game Count",
-        description="Allows you to decrease the number of patches rendered in game.\nCan only be lower than existing patch count",
+        description="Allows you to decrease the number of patches rendered in game.\nWARNING: Increasing past original patch count may corrupt the file.",
         default=False,
     )
 
@@ -499,16 +505,11 @@ class Export_Data(Operator, ExportHelper):
         return write_file_data(context, self.filepath, self.platform, self.scale, self.use_count, self.count, self.override_count)
 
 
-classes = [Export_Data]
-
-
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    bpy.utils.register_class(Export_Data)
 
 def unregister():
-    for cls in classes:
-        bpy.utils.unregister_class(cls)
+    bpy.utils.unregister_class(Export_Data)
 
 
 if __name__ == "__main__":
