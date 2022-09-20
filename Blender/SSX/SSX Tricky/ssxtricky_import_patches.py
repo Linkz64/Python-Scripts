@@ -1,12 +1,12 @@
 """ 
-Blender (2.93+) script that imports surface patches from SSX Tricky's files as NURBS
+Blender (2.92+) script that imports surface patches from SSX Tricky's files as NURBS
 Supported file formats: .pbd (PS2), .xbd (Xbox), .nbd (GameCube)
 
 Credits:
     SSX Tricky patch import code
         Linkz - https://github.com/Linkz64
 
-    Decoded SSX patch points
+    Decoding SSX patch points
         Archy - https://github.com/GlitcherOG
         Kris  - https://github.com/Kris2ffer
     
@@ -29,9 +29,8 @@ To do:
     - Fix problem where some patch edges have swapped control points
     - Group patches in collections (Sort them based on type or name prefix)
     - Implement UVs (Currently not possible)
-    - Implement Materials
+    - Implement Materials and Textures
     - Import custom properties (Name, Texture ID, Surface type, etc)
-    - Fix point r11
     - Disable count input in file browser if use_count is False
 
 """
@@ -47,6 +46,8 @@ collec = bpy.context.collection
 
 
 timeStart = time.time() # start timer
+
+print(f"\n\nExporter Script Initiated {time.localtime().tm_hour}:{time.localtime().tm_min}\n\n")
 
 
 def read_file_data(context, filepath, scale, use_count, count):
@@ -87,7 +88,7 @@ def read_file_data(context, filepath, scale, use_count, count):
         patchAddress = int(patchOffset[0])
     
     else:
-        print(f"ERROR: Invalid version. 3rd byte should be 1, 2 or 3.")
+        print(f"ERROR: Invalid platform. 3rd byte should be 1, 2 or 3.")
         fbd.close()
     
 
@@ -101,7 +102,8 @@ def read_file_data(context, filepath, scale, use_count, count):
 
     pchScale = scale # Scale division
     
-    
+    processedPoints = [vec((0.0, 0.0, 0.0))]*16
+    processedPointsW = [1.0]*16
     
     
     def import_patches_ps2(): # PLAYSTATION 2
@@ -111,17 +113,22 @@ def read_file_data(context, filepath, scale, use_count, count):
             for pch in range(patchCount): # go through patches
     
                 fbd.seek(0x50, 1) # skip UVs
-    
-                patchPoints = [mathutils.Vector((0.0, 0.0, 0.0, 0.0))]
+
+
                 for pp in range(16): # unpack points
                     x,y,z,w = struct.unpack('ffff', fbd.read(16))
-                    #fbd.seek(0x4, 1)
-                    #print(f"{round(x, 4), round(y, 4), round(z, 4), w}")
-                    patchPoints.append(mathutils.Vector((x/pchScale, y/pchScale, z/pchScale, 0.0)))
-                #print(patchPoints)
 
-                
-                create_patch_obj(decode_patch_points(patchPoints), "Patch"+str(pch), pch)
+                    processedPoints[ -pp+15] = mathutils.Vector((x / pchScale, y / pchScale, z / pchScale))
+                    processedPointsW[-pp+15] = w
+
+                    #print(x,y,z)
+
+                    #patchPoints.append(mathutils.Vector((x/pchScale, y/pchScale, z/pchScale, 0.0)))
+
+
+                #print(processedPoints)
+
+                create_patch_obj(decode_patch_points(), "Patch"+str(pch), pch)
     
                 fbd.seek(0x70, 1) # skip extra
     
@@ -145,6 +152,7 @@ def read_file_data(context, filepath, scale, use_count, count):
                 patchPoints = []
                 for pp in range(16): # unpack points
                     x,y,z = struct.unpack('fff', fbd.read(12))
+                    #print(x,y,z)
                     #print(f"{round(x, 4), round(y, 4), round(z, 4)}")
                     fbd.seek(0x8, 1) # or unpack extras (unk, unk1) = struct.unpack('f'*2, fbd.read(4*2))
                     patchPoints.append((x/pchScale, y/pchScale, z/pchScale, 1.0))
@@ -172,23 +180,20 @@ def read_file_data(context, filepath, scale, use_count, count):
 
             for pch in range(patchCount): # go through patches
     
-                print(f"\n\n\n{hex(fbd.tell())}\n")
-    
                 fbd.seek(0x50, 1) # skip UVs
     
-                patchPoints = [mathutils.Vector((0.0, 0.0, 0.0, 0.0))]
                 for pp in range(16): # unpack points
                     x,y,z,w = struct.unpack('>ffff', fbd.read(16))
-                    #fbd.seek(0x4, 1)
-                    #print(f"{round(x, 4), round(y, 4), round(z, 4), w}")
-                    patchPoints.append(mathutils.Vector((x/pchScale, y/pchScale, z/pchScale, 0.0)))
-                #print(patchPoints)
+
+                    processedPoints[ -pp+15] = mathutils.Vector((x / pchScale, y / pchScale, z / pchScale))
+                    processedPointsW[-pp+15] = w
+
     
-                create_patch_obj(decode_patch_points(patchPoints), "Patch"+str(pch), pch)
+                create_patch_obj(decode_patch_points(), "Patch"+str(pch), pch)
     
                 fbd.seek(0x70, 1) # skip extra
     
-                print(f"Patch: {pch+1:6} out of {patchCount:} imported.")
+                print(f"Patch: {pch+1:6} out of {patchCount:} imported.    {hex(fbd.tell())}")
         
             
             fbd.close()
@@ -252,57 +257,84 @@ def read_file_data(context, filepath, scale, use_count, count):
         return c
 
     
+    def proc_to_mid_eq1(a, b,                   processedPoints, midTablePoints):
+        return processedPoints[a] / 3 + midTablePoints[b]
+
+    def proc_to_mid_eq2(a, b, midA,             processedPoints, midTablePoints):
+        return (processedPoints[a] + processedPoints[b]) / 3 + midTablePoints[midA]
+
+    def proc_to_mid_eq3(a,    midA, midB, midC, processedPoints, midTablePoints):
+        return processedPoints[a] + processedPoints[midA] + processedPoints[midB] + processedPoints[midC]
+
+
+    def mid_to_raw_eq1(a, b,                   midTablePoints, rawPoints):
+        return midTablePoints[a] / 3 + rawPoints[b]
+
+    def mid_to_raw_eq2(a, b, midA,             midTablePoints, rawPoints):
+        return (midTablePoints[a] + midTablePoints[b]) / 3 + rawPoints[midA]
+
+    def mid_to_raw_eq3(a,    midA, midB, midC, midTablePoints):
+        return midTablePoints[a] + midTablePoints[midA] + midTablePoints[midB] + midTablePoints[midC]
     
     
     
-    # IMPORTANT FUNCTIONS
+    def decode_patch_points():
+
+        midTablePoints  = [vec((0.0, 0.0, 0.0))]*16
+        rawPoints       = [vec((0.0, 0.0, 0.0))]*16
+
+
+        midTablePoints[ 0] = processedPoints[0]
+        midTablePoints[ 1] = proc_to_mid_eq1( 1,  0,         processedPoints, midTablePoints)
+        midTablePoints[ 2] = proc_to_mid_eq2( 2,  1,  1,     processedPoints, midTablePoints)
+        midTablePoints[ 3] = proc_to_mid_eq3( 3,  2,  1,  0, processedPoints, midTablePoints)
+
+        midTablePoints[ 4] = processedPoints[4]
+        midTablePoints[ 5] = proc_to_mid_eq1( 5,  4,         processedPoints, midTablePoints)
+        midTablePoints[ 6] = proc_to_mid_eq2( 6,  5,  5,     processedPoints, midTablePoints)
+        midTablePoints[ 7] = proc_to_mid_eq3( 7,  6,  5,  4, processedPoints, midTablePoints)
+
+        midTablePoints[ 8] = processedPoints[8]
+        midTablePoints[ 9] = proc_to_mid_eq1( 9,  8,         processedPoints, midTablePoints)
+        midTablePoints[10] = proc_to_mid_eq2(10,  9,  9,     processedPoints, midTablePoints)
+        midTablePoints[11] = proc_to_mid_eq3(11, 10,  9,  8, processedPoints, midTablePoints)
+
+        midTablePoints[12] = processedPoints[12]
+        midTablePoints[13] = proc_to_mid_eq1(13, 12,         processedPoints, midTablePoints)
+        midTablePoints[14] = proc_to_mid_eq2(14, 13, 13,     processedPoints, midTablePoints)
+        midTablePoints[15] = proc_to_mid_eq3(15, 14, 13, 12, processedPoints, midTablePoints)
+
+
+        rawPoints[ 0] = midTablePoints[0]
+        rawPoints[ 1] = midTablePoints[1]
+        rawPoints[ 2] = midTablePoints[2]
+        rawPoints[ 3] = midTablePoints[3]
+
+        rawPoints[ 4] = mid_to_raw_eq1( 4,  0,         midTablePoints, rawPoints)
+        rawPoints[ 5] = mid_to_raw_eq1( 5,  1,         midTablePoints, rawPoints)
+        rawPoints[ 6] = mid_to_raw_eq1( 6,  2,         midTablePoints, rawPoints)
+        rawPoints[ 7] = mid_to_raw_eq1( 7,  3,         midTablePoints, rawPoints)
+
+        rawPoints[ 8] = mid_to_raw_eq2( 8,  4,  4,     midTablePoints, rawPoints)
+        rawPoints[ 9] = mid_to_raw_eq2( 9,  5,  5,     midTablePoints, rawPoints)
+        rawPoints[10] = mid_to_raw_eq2(10,  6,  6,     midTablePoints, rawPoints)
+        rawPoints[11] = mid_to_raw_eq2(11,  7,  7,     midTablePoints, rawPoints)
+
+        rawPoints[12] = mid_to_raw_eq3(12,  8,  4,  0, midTablePoints)
+        rawPoints[13] = mid_to_raw_eq3(13,  9,  5,  1, midTablePoints)
+        rawPoints[14] = mid_to_raw_eq3(14, 10,  6,  2, midTablePoints)
+        rawPoints[15] = mid_to_raw_eq3(15, 11,  7,  3, midTablePoints)
+
+
+
+        for i in range(16):
+            rawPoints[i] = vec((rawPoints[i][0], rawPoints[i][1], rawPoints[i][2], 1.0))
+
     
-    def decode_patch_points(p): # EQUATIONS, CALCULATIONS, EXAGGERATIONS, THE LOT!
-    
-        # r = raw point, p = processed point
-    
-        r01 = p[16]                                                                      # 16
-        r02 = p[16] + p[15]/3                                                            # 15
-        r03 = r02 + (p[15] + p[14])/3                                                    # 14
-        r04 = p[16] + p[15] + p[14] + p[13]                                              # 13
-    
-        r05 = p[16] + p[12] /3                                                           # 12
-        r06 = p[16] + (p[15] + p[12] + p[11]/3 )/3                                       # 11
-        r07 = r06 + (p[15] + p[14] + (p[11] + p[10])/3 )/3                               # 10
-        r08 = r04 + (p[12] + p[11] + p[10] + p[9])/3                                     # 9
-    
-        r09 = r05 + (p[12] + p[8]) / 3                                                   # 8
-        r10 = r06 + (p[12] + p[8] + (p[11] + p[7])/3 )/3                                 # 7
-        r11 = r07 + (p[12] + p[8]/3 + (p[15]+p[11]+p[7])/3 + (p[14]+p[10]+p[6]/3) )/3    # 6
-        r12 = (p[5]+p[9]+p[6]+p[10]+p[7]+p[11]+p[8]+p[12])/3 + r08                       # 5
-    
-        r13 = p[16] + p[12] + p[8] + p[4]                                                # 4
-        r14 = r13 + (p[15] + p[11] + p[7] + p[3])/3                                      # 3
-        r15 = (p[2] + p[3] + p[7] + p[11] + p[15] + p[14] + p[10] + p[6])/3 + r14        # 2
-        r16 = sum_vectors(p)                                                             # 1
-    
-        """
-        missing [maybe -(H5+(H4+H3/3)) or  or  or =E13+(E3+E4+E5+H3+H4+H5)/3]
-        =H12+(B4+B5+(E3+E4+E5)/3+(H3+H4+H5/3))/3
-        =H12+(B4+B5/3+(E3+E4+E5)/3+(H3+H4+H5/3))/3
-    
-        """
-    
-        #r11 = midpoint2(r07, r15)
-        r11 = midpoint4(r07, r15, r10, r12)
-    
-        r01[3]=r02[3]=r03[3]=r04[3]= 1.0
-        r05[3]=r06[3]=r07[3]=r08[3]= 1.0
-        r09[3]=r10[3]=r11[3]=r12[3]= 1.0
-        r13[3]=r14[3]=r15[3]=r16[3]= 1.0
-    
-    
-        rawPoints = [r01, r02, r03, r04,
-                      r05, r06, r07, r08,
-                      r09, r10, r11, r12,
-                      r13, r14, r15, r16]
-    
-        rawPoints = sort_a(rawPoints)
+        #print(rawPoints)
+
+
+        #rawPoints = sort_b(rawPoints)
     
         return rawPoints
     
@@ -346,7 +378,7 @@ def read_file_data(context, filepath, scale, use_count, count):
     
     
     
-    def run_wout_update(func): # run without view update
+    def run_wout_update(func):              # run without view update
         from bpy.ops import _BPyOpsSubModOp
         view_layer_update = _BPyOpsSubModOp._view_layer_update
         def dummy_view_layer_update(context):
@@ -372,7 +404,7 @@ def read_file_data(context, filepath, scale, use_count, count):
             run_wout_update(import_patches_ngc) # GAMECUBE
         else:
             fbd.close()
-            print("INVALID CONSOLE VER")
+            print("ERROR: Invalid platform.")
     else:
         fbd.close()
         print("\nPatch count is invalid. patchCount =", patchCount)
@@ -422,7 +454,7 @@ class ImportData(Operator, ImportHelper):
 
     count: IntProperty(
         name    = "Patch Count",
-        default = 1000,
+        default = 500,
         min     = 1,
         max     = 1000000,
         subtype = 'UNSIGNED'
