@@ -41,7 +41,7 @@ def read_bounds():
 
     f.seek(0x48, 0)
 
-    (gridResolution  ,) = struct.unpack(en+'I', f.read(4)) # = 16
+    (gridBoxCount    ,) = struct.unpack(en+'I', f.read(4)) # = 16
     (offsetListOffset,) = struct.unpack(en+'I', f.read(4)) # = 84
     (offsetListEnd   ,) = struct.unpack(en+'I', f.read(4))
 
@@ -54,16 +54,7 @@ def read_bounds():
         offsetListContainer.append(offsetTuple)
 
 
-    sortedOffsetList = []
-    for i in range(offsetListCount):
-        
-        for j in range(offsetCount): # remove null offsets
-
-            if offsetListContainer[i][j] > 0:
-
-                sortedOffsetList.append(offsetListContainer[i][j])
-    
-    print(sortedOffsetList)
+    sortedOffsetList = clear_list(offsetListContainer)
 
 
     for i in range(len(sortedOffsetList)):
@@ -76,13 +67,13 @@ def read_bounds():
 
         firstExtras = struct.unpack(en+'I'*12, f.read(4*12))
     
-        #create_all(f"bbox_{i}_first", firstBounds[0], firstBounds[1], firstBounds[2])
-        create_bounds(f"bbox_{i}_first", firstBounds[0], firstBounds[1])
+        #create_all(f"bbox_{i}_a", firstBounds[0], firstBounds[1], firstBounds[2])
+        create_bounds(f"bbox_{i}_a", firstBounds[0], firstBounds[1])
 
-        print(f"\nbbox_{i}_first    Ends:{hex(f.tell())}    Values:\n{firstBounds}\n{firstExtras}\n")
+        print(f"\nbbox_{i}_a    Ends:{hex(f.tell())}    Values:\n{firstBounds}\n{firstExtras}\n")
 
 
-        for j in range(gridResolution):
+        for j in range(gridBoxCount):
 
             secondBounds = [(0,0,0)]*3
             for k in range(3):
@@ -90,10 +81,10 @@ def read_bounds():
 
             secondExtras = struct.unpack(en+'I'*10, f.read(4*10))
     
-            #create_all(f"bbox_second_{i}_{j}", secondBounds[0], secondBounds[1], secondBounds[2])
-            create_bounds(f"bbox_{i}_second_{j}", secondBounds[0], secondBounds[1])
+            #create_all(f"bbox_b_{i}_{j}", secondBounds[0], secondBounds[1], secondBounds[2])
+            create_bounds(f"bbox_{i}_b_{j}", secondBounds[0], secondBounds[1])
     
-            print(f"bbox_{i}_second_{j}    Ends:{hex(f.tell())}    Values:\n{secondBounds}\n{secondExtras}")
+            print(f"bbox_{i}_b_{j}    Ends:{hex(f.tell())}    Values:\n{secondBounds}\n{secondExtras}")
     
     
     timeEnd = time.time()
@@ -101,6 +92,15 @@ def read_bounds():
 
     f.close()
 
+
+
+def clear_list(messyList): # removes 0's from list
+    clearedList = []
+    for i in range(len(messyList)):
+        for j in range(len(messyList[0])): # remove null offsets
+            if messyList[i][j] > 0:
+                clearedList.append(messyList[i][j])
+    return clearedList
 
 def create_empty(name, pos): # create empty object
     empty = bdata.objects.new(name, None) # Object instances
@@ -112,22 +112,18 @@ def create_empty(name, pos): # create empty object
 
 def create_bounds(name, pos1, pos2): # create just bounds
 
-    coords = [pos1, pos2]
-
     mesh = bdata.meshes.new(name)
     obj = bdata.objects.new(name, mesh)
     collec.objects.link(obj)
-    mesh.from_pydata(coords, [], [])
+    mesh.from_pydata([pos1, pos2], [], [])
     obj.display_type = 'BOUNDS'
 
 def create_all(name, pos0, pos1, pos2): # create bounds with 3rd point as object origin
 
-    coords = [ pos0, pos1 ]
-
     mesh = bdata.meshes.new(name)
     obj = bdata.objects.new(name, mesh)
     collec.objects.link(obj)
-    mesh.from_pydata(coords, [], [])
+    mesh.from_pydata([ pos0, pos1 ], [], [])
     obj.display_type = 'BOUNDS'
 
     bpy.context.scene.cursor.location = pos2        # moves cursor to pos0
