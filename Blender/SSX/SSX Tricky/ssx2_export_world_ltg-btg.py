@@ -1,7 +1,5 @@
 import bpy
 import struct
-import mathutils
-
 import time
 
 bdata = bpy.data
@@ -10,11 +8,18 @@ collec = bpy.context.collection
 timeStart = time.time() # start timer
 print(f"TIME STARTED {time.localtime().tm_hour}:{time.localtime().tm_min}")
 
+
+filePath = "G:/Emulated/Playstation 2/Games/SSX Tricky/data/models/"
+fileName = "snow"
+fileSuff = "ltg"
+
+scaleMult = 100
+
+
+
 def export_bounds():
 
-    filePath = "G:/Emulated/Playstation 2/Games/SSX Tricky/data/models"
-    fileName = "gari"+".ltg" # ps2 and xbox use .ltg, gc uses .btg
-    f = open(filePath+"/"+fileName, 'r+b')
+    f = open(filePath+"/"+fileName+"."+fileSuff, 'r+b')
 
     en = "<"
 
@@ -24,7 +29,7 @@ def export_bounds():
     if enByte == 1:
         en = ">"
 
-    pack_write_bounds("bbox_world", f, en) # export world bounds
+    pack_write_bounds(f"{fileName}_bbox.world", f, en) # export world bounds
 
     f.seek(0x2C, 0)
 
@@ -53,20 +58,24 @@ def export_bounds():
 
         f.seek(sortedOffsetList[i], 0)
 
-        pack_write_bounds(f"bbox_{i}_a", f, en)
+        objName = f"{fileName}_bbox.a_{i}"
+
+        pack_write_bounds(objName, f, en)
 
         f.seek(48, 1) # skip extras
 
-        print(f"\nbbox_{i}_a    Ends:{hex(f.tell())}    Values:\n")
+        print(f"\n{objName}    Ends:{hex(f.tell())}    Values:\n")
 
 
         for j in range(gridBoxCount):
 
-            pack_write_bounds(f"bbox_{i}_b_{j}", f, en)
+            obj2Name = f"{fileName}_bbox.b_{i}_{j}"
+
+            pack_write_bounds(obj2Name, f, en)
 
             f.seek(40, 1) # skip extras
     
-            print(f"bbox_{i}_b_{j}    Ends:{hex(f.tell())}    Values:\n")
+            print(f"{obj2Name}    Ends:{hex(f.tell())}    Values:\n")
     
     
     timeEnd = time.time()
@@ -92,7 +101,10 @@ def pack_write_bounds(objName, file, endianess): # export bounds and calculated 
     obj = bdata.objects[objName]
     vertices = obj.data.vertices
     
-    verts = [obj.matrix_world @ vert.co for vert in vertices] 
+    verts = [obj.matrix_world @ vert.co for vert in vertices]
+
+    for i in range(len(verts)):
+        verts[i] *= scaleMult
 
     origin = midpoint2(verts[0], verts[1])
 
